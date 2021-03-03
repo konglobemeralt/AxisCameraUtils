@@ -21,78 +21,81 @@ objp = np.zeros((CHECKERBOARD[0]*CHECKERBOARD[1],3), np.float32)
 objp[:,:2] = np.mgrid[0:7,0:6].T.reshape(-1,2)
 axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
   
-# Vector for 3D points 
-threedpoints = [] 
-  
-# Vector for 2D points 
-twodpoints = [] 
-  
-  
-#  3D points real world coordinates 
-objectp3d = np.zeros((1, CHECKERBOARD[0]  
-                      * CHECKERBOARD[1],  
-                      3), np.float32) 
-objectp3d[0, :, :2] = np.mgrid[0:CHECKERBOARD[0], 
-                               0:CHECKERBOARD[1]].T.reshape(-1, 2) 
-prev_img_shape = None
-  
-images = glob.glob('*.jpg') 
-  
-for filename in images: 
-    image = cv2.imread(filename) 
-    grayColor = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) 
 
-    ret, corners = cv2.findChessboardCorners( 
-                    grayColor, CHECKERBOARD,  
-                    cv2.CALIB_CB_ADAPTIVE_THRESH  
-                    + cv2.CALIB_CB_FAST_CHECK + 
-                    cv2.CALIB_CB_NORMALIZE_IMAGE) 
-  
-    # them on the images of checker board 
-    if ret == True: 
-        threedpoints.append(objectp3d) 
-  
-        # Refining pixel coordinates 
-        # for given 2d points. 
-        corners2 = cv2.cornerSubPix( 
-            grayColor, corners, (11, 11), (-1, -1), criteria) 
-  
-        twodpoints.append(corners2) 
-  
-        # Draw and display the corners 
-        image = cv2.drawChessboardCorners(image,  
-                                          CHECKERBOARD,  
-                                          corners2, ret) 
-  
-    cv2.imshow('img', image) 
-    #cv2.waitKey(0) 
-  
-cv2.destroyAllWindows() 
-  
-h, w = image.shape[:2] 
-  
-  
-# Perform camera calibration by 
-ret, matrix, distortion, r_vecs, t_vecs = cv2.calibrateCamera( 
-    threedpoints, twodpoints, grayColor.shape[::-1], None, None) 
-  
-  
-# Displayig required output 
-print(" Camera matrix:") 
-print(matrix) 
-  
-print("\n Distortion coefficient:") 
-print(distortion) 
-  
-print("\n Rotation Vectors:") 
-print(r_vecs) 
-  
-print("\n Translation Vectors:") 
-print(t_vecs) 
+def getCameraMatrices():
+	# Vector for 3D points 
+	threedpoints = [] 
+	  
+	# Vector for 2D points 
+	twodpoints = [] 
+	  
+	  
+	#  3D points real world coordinates 
+	objectp3d = np.zeros((1, CHECKERBOARD[0]  
+		              * CHECKERBOARD[1],  
+		              3), np.float32) 
+	objectp3d[0, :, :2] = np.mgrid[0:CHECKERBOARD[0], 
+		                       0:CHECKERBOARD[1]].T.reshape(-1, 2) 
+	prev_img_shape = None
+	  
+	images = glob.glob('*.jpg') 
+	  
+	for filename in images: 
+		image = cv2.imread(filename) 
+		grayColor = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) 
+
+		ret, corners = cv2.findChessboardCorners( 
+		            grayColor, CHECKERBOARD,  
+		            cv2.CALIB_CB_ADAPTIVE_THRESH  
+		            + cv2.CALIB_CB_FAST_CHECK + 
+		            cv2.CALIB_CB_NORMALIZE_IMAGE) 
+	  
+	# them on the images of checker board 
+		if ret == True: 
+			threedpoints.append(objectp3d) 
+	  
+			# Refining pixel coordinates 
+			# for given 2d points. 
+			corners2 = cv2.cornerSubPix( 
+		    		grayColor, corners, (11, 11), (-1, -1), criteria) 
+	  
+			twodpoints.append(corners2) 
+	  
+			# Draw and display the corners 
+			image = cv2.drawChessboardCorners(image,  
+		                                  CHECKERBOARD,  
+		                                  corners2, ret) 
+	  
+			cv2.imshow('img', image) 
+			cv2.waitKey(10) 
+	  
+	cv2.destroyAllWindows() 
+	  
+	h, w = image.shape[:2] 
+	  
+	  
+	# Perform camera calibration by 
+	ret, matrix, distortion, rVecs, tVecs = cv2.calibrateCamera( 
+	    threedpoints, twodpoints, grayColor.shape[::-1], None, None) 
+	  
+	  
+	# Displayig required output 
+	print(" Camera matrix:") 
+	print(matrix) 
+	  
+	print("\n Distortion coefficient:") 
+	print(distortion) 
+	  
+	print("\n Rotation Vectors:") 
+	print(rVecs) 
+	  
+	print("\n Translation Vectors:") 
+	print(tVecs) 
 
 
-newcameramtx, roi=cv2.getOptimalNewCameraMatrix(matrix, distortion, (w,h), 1, (w,h))
-
+	newcameramatrix, roi=cv2.getOptimalNewCameraMatrix(matrix, distortion, (w,h), 1, (w,h))
+	
+	return matrix, distortion, rVecs, tVecs, newcameramatrix
 
 def empty(a):
 	pass
@@ -156,6 +159,40 @@ def brightnessAndContrast(input_img, brightness = 0, contrast = 0):
 
     return buf
 
+def preProcess(img):
+	# CLAHE (Contrast Limited Adaptive Histogram Equalization)
+	clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8,8))
+
+	lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)  # convert from BGR to LAB color space
+	l, a, b = cv2.split(lab)  # split on 3 different channels
+
+	l2 = clahe.apply(l)  # apply CLAHE to the L-channel
+
+	lab = cv2.merge((l2,a,b))  # merge channels
+	img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)  # convert from LAB to BGR
+
+	contrast = cv2.getTrackbarPos("Contrast", "Parameters")
+	img = brightnessAndContrast(img, 0, contrast)
+
+	imgBlur = cv2.GaussianBlur(img, (7,7), 7)
+	imgGray = cv2.cvtColor(imgBlur, cv2.COLOR_BGR2GRAY)
+
+
+	black = cv2.getTrackbarPos("Black", "Parameters")
+	white = cv2.getTrackbarPos("White", "Parameters")
+	ret, imgGray = cv2.threshold(imgGray,black,white,0)
+
+	threshold1 = cv2.getTrackbarPos("Threshold 1", "Parameters")
+	threshold2 = cv2.getTrackbarPos("Threshold 2", "Parameters")
+	imgCanny = cv2.Canny(imgGray, threshold1, threshold2)
+
+
+	kernel = np.ones((5, 5))
+	imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
+
+	return imgDil
+
+
 def getContours(img, imgContour):
 	contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
@@ -173,7 +210,43 @@ def getContours(img, imgContour):
 			x, y, w, h = cv2.boundingRect(approx)
 			cv2.rectangle(imgContour, (x, y), (x + w, y + h), (0, 255, 0), 5)
 
-			cv2.putText(imgContour, "En fyrkant!", (x, y), font, 1, (0, 0, 0))
+			##cv2.putText(imgContour, "En fyrkant!", (x, y), font, 1, (0, 0, 0))
+			return x, y
+	return 0, 0
+
+def calculateXYZ(u,v):
+
+	X_center=10.2
+	Y_center=9.1
+	Z_center=91.1
+	worldPoints=np.array([[X_center,Y_center,Z_center],
+		[11.0,5.0,91.0],
+		[20.8,5.0,91.4],
+		[11.0,13.5,91.4],
+		[20.8,13.5,91.9]], dtype=np.float32)
+
+
+	imagePoints=np.array([[307,227],
+		[315,187],
+		[425,187],
+		[314,282],
+		[426,282]], dtype=np.float32)
+
+
+	ret, rvec1, tvec1=cv2.solvePnP(worldPoints,imagePoints,matrix,distortion)
+	rotationMatrix, jac=cv2.Rodrigues(rvec1)
+	##extrinsicMatrix = np.column_stack((rotationMatrix,tvec1)) Useless
+
+	scalingfactor = 162
+	
+	uv=np.array([[u,v,1]], dtype=np.float32)
+	uv=uv.T
+	suv=scalingfactor*uv
+	xyzC=np.linalg.inv(matrix).dot(suv)
+	xyzC=xyzC-tvec1
+	XYZ=np.linalg.inv(rotationMatrix).dot(xyzC)
+			
+	return XYZ
 
 
 cv2.namedWindow("Parameters")
@@ -185,6 +258,8 @@ cv2.createTrackbar("Threshold 1", "Parameters", 150, 155, empty)
 cv2.createTrackbar("Threshold 2", "Parameters", 255, 155, empty)
 cv2.createTrackbar("Area", "Parameters", 10000, 50000, empty)
 
+matrix, distortion, rVecs, tVecs, newcameramatrix = getCameraMatrices()
+
 while(cap.isOpened()):
 	success, img = cap.read()
 	if success:
@@ -192,44 +267,14 @@ while(cap.isOpened()):
 		imgContour = img.copy()
 		undistort = img.copy()
 
-		# CLAHE (Contrast Limited Adaptive Histogram Equalization)
-
-		clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8,8))
-
-		lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)  # convert from BGR to LAB color space
-		l, a, b = cv2.split(lab)  # split on 3 different channels
-
-		l2 = clahe.apply(l)  # apply CLAHE to the L-channel
-
-		lab = cv2.merge((l2,a,b))  # merge channels
-		img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)  # convert from LAB to BGR
-
-		contrast = cv2.getTrackbarPos("Contrast", "Parameters")
-		img = brightnessAndContrast(img, 0, contrast)
-
-		imgBlur = cv2.GaussianBlur(img, (7,7), 7)
-		imgGray = cv2.cvtColor(imgBlur, cv2.COLOR_BGR2GRAY)
-
-
-		black = cv2.getTrackbarPos("Black", "Parameters")
-		white = cv2.getTrackbarPos("White", "Parameters")
-		ret, imgGray = cv2.threshold(imgGray,black,white,0)
-
-		threshold1 = cv2.getTrackbarPos("Threshold 1", "Parameters")
-		threshold2 = cv2.getTrackbarPos("Threshold 2", "Parameters")
-		imgCanny = cv2.Canny(imgGray, threshold1, threshold2)
-
-
-		kernel = np.ones((5, 5))
-		imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
-		getContours(imgCanny, imgContour)
+		imgPrP = preProcess(img.copy())
+		xCorner, yCorner = getContours(imgPrP, imgContour)
 		
-		dst = cv2.undistort(undistort, matrix, distortion, None, newcameramtx)
-		# crop the image
-		x, y, w, h = roi
+		dst = cv2.undistort(undistort, matrix, distortion, None, newcameramatrix)
+		
+		# crop the imagenewcameramatrix
+		#x, y, w, h = roi
 		#dst = dst[y:y+h, x:x+w]
-		#cv2.imwrite('calibresult.png', dst)
-
 
 
 		gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
@@ -237,38 +282,23 @@ while(cap.isOpened()):
 		if ret == True:
 			corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
 			# Find the rotation and translation vectors.
-			ret,rvecs, tvecs = cv2.solvePnP(objp, corners2, matrix, distortion)
+			ret,rVecs, tVecs = cv2.solvePnP(objp, corners2, matrix, distortion)
 			# project 3D points to image plane
-			imgpts, jac = cv2.projectPoints(axis, rvecs, tvecs, matrix, distortion)
+			imgpts, jac = cv2.projectPoints(axis, rVecs, tVecs, matrix, distortion)
 			imgContour = draw(imgContour,corners2,imgpts)
 
 			np.linalg.inv(matrix)
 			
-			R_mtx, jac=cv2.Rodrigues(rvecs)
+			rotationMatrix, jac=cv2.Rodrigues(rVecs)
 
-			Rt=np.column_stack((R_mtx,tvecs))
+			rotationMatrix=np.column_stack((rotationMatrix,tVecs))
 			
 			#(corners[1] * np.linalg.inv(matrix) - tvecs ) * np.linalg.inv(R_mtx)
 			print(f"A inverse: {np.linalg.inv(matrix)}")
 			print(f"Corner: {corners[1]}")
-			sVector= np.array([[corners[0][0][0], corners[0][0][1], 1]]).T ##Shack origo
-			print(f"Corner in vec: {sVector}")
-			StimesAinverse = np.linalg.inv(matrix).dot(sVector)
-			aboveMinusT = StimesAinverse - tvecs
-			xyzCoords = np.linalg.inv(R_mtx).dot(aboveMinusT)
-			print("XYZ origo: {xyzCoords}")
-
-			sVector2= np.array([[corners[1][0][0], corners[1][0][1], 1]]).T ##Shack point
-			print(f"Corner2 in vec: {sVector2}")
-			StimesAinverse2 = np.linalg.inv(matrix).dot(sVector2)
-			aboveMinusT2 = StimesAinverse2 - tvecs
-			xyzCoords2 = np.linalg.inv(R_mtx).dot(aboveMinusT2)
+			XYZ = calculateXYZ(corners[0][0][0], corners[0][0][1])
 			
-			diff = xyzCoords - xyzCoords2
-			cv2.line(imgContour, (corners[0][0][0], corners[0][0][1]), (corners[11][0][0], corners[11][0][1]), (255, 0, 155), 5)
-			print(f"diff in vec: {diff}")
-
-			print(f"XYZ vec: {xyzCoords}")
+			print(f"XYZ vec: {XYZ}")
 			cv2.imshow('Axis',imgContour)
 
 			
